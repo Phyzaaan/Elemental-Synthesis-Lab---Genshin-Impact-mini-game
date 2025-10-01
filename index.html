@@ -72,6 +72,19 @@
             background-color: #000b24;
         }
 
+        #congoMsg {
+            opacity: 0;
+            scale: 0.3;
+            pointer-events: none;
+            transition: all cubic-bezier(.32,1.5,.77,1.49) 0.7s;
+        }
+
+        #congoMsg.show {
+            opacity: 1;
+            scale: 1;
+            pointer-events: auto;
+        }
+
         /* Mobile adjustments */
         @media (max-width: 640px) {
             .element-tile {
@@ -127,6 +140,19 @@
             <button onclick="resetLab()"
                 class="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition transform hover:scale-105">
                 Reset Lab
+            </button>
+        </div>
+    </div>
+
+    <div id="congoMsg"
+        class="fixed inset-0 flex items-center justify-center z-50 transition-opacity duration-500">
+        <div
+            class="bg-gradient-to-br from-purple-700 via-blue-600 to-indigo-900 rounded-3xl shadow-2xl p-8 text-center border-4 border-yellow-400">
+            <h1 class="title text-4xl font-extrabold text-yellow-300 mb-4 drop-shadow-lg">🎉 Congratulations! 🎉</h1>
+            <p class="text-xl text-white mb-6 font-semibold">You have found all Elemental Reactions!</p>
+            <button onclick="hideCongoMsg()"
+                class="px-8 py-3 bg-yellow-400 hover:bg-yellow-500 text-indigo-900 font-bold rounded-xl shadow-lg transition transform hover:scale-105 text-lg">
+                OK
             </button>
         </div>
     </div>
@@ -198,6 +224,7 @@
         const messageBox = document.getElementById('message-box');
         const labPlaceholder = document.getElementById('lab-placeholder');
         const counter = document.getElementById('counter');
+        const congoMsg = document.getElementById('congoMsg');
 
         // --- INITIALIZATION ---
 
@@ -244,6 +271,7 @@
 
             if (isDraggable) {
                 tile.addEventListener('dragstart', handleDragStart);
+                reactionLab.addEventListener('dragleave', handleDragLeave);
             }
             // Add click for lab tiles
             tile.addEventListener('click', handleTileClick);
@@ -308,7 +336,6 @@
             }
 
         }
-        reactionLab.addEventListener('dragleave', handleDragLeave);
 
         function handleDrop(event) {
             event.preventDefault();
@@ -442,6 +469,7 @@
 
             if (RemainingElements === 0) {
                 displayMessage('Congratulations! You have discovered all elemental reactions!', false);
+                congoMsg.classList.add('show');
             }
             showPlaceholder();
         }
@@ -452,6 +480,10 @@
             reactionLab.querySelectorAll('.element-tile').forEach(tile => tile.remove());
             showPlaceholder();
             displayMessage('Lab reset. Start a fresh synthesis!');
+        }
+
+        function hideCongoMsg() {
+            congoMsg.classList.remove('show');
         }
 
         // Track selected lab tiles for reaction
@@ -493,7 +525,7 @@
                         const newElement = REACTION_RECIPES[recipeKey];
 
                         if (newElement) {
-                            performReaction(newElement, tileB, tileA, x = null,y = null, isDraggable = false);
+                            performReaction(newElement, tileB, tileA, x = null, y = null, isDraggable = false);
                         } else {
                             displayMessage(`No known reaction between ${nameA} and ${nameB}. Experiment failed!`, true);
                         }
