@@ -49,6 +49,11 @@
         }
 
         .reaction-lab {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
             min-height: 50vh;
             border: 4px dashed #475569;
             background-color: #1e293b;
@@ -240,6 +245,8 @@
             if (isDraggable) {
                 tile.addEventListener('dragstart', handleDragStart);
             }
+            // Add click for lab tiles
+            tile.addEventListener('click', handleTileClick);
             return tile;
         }
 
@@ -409,7 +416,7 @@
         let RemainingElements = Object.keys(ELEMENTS).length - 7;
         let FoundElements = 0;
 
-        function performReaction(newElement, targetTile, sourceTile, x, y) {
+        function performReaction(newElement, targetTile, sourceTile, x = null, y = null, isDraggable = true) {
             // 1. Remove the two source tiles from the Lab
             targetTile.remove();
             if (sourceTile) {
@@ -418,7 +425,7 @@
 
             // 2. Add the new reaction tile to the Lab at the drop point
             // The newly created tile must also be draggable
-            const newTile = createElementTile(newElement, true, x, y);
+            const newTile = createElementTile(newElement, isDraggable, x, y);
             reactionLab.appendChild(newTile);
 
             // 3. Add the new reaction to the Found Elements list if it's new
@@ -447,82 +454,56 @@
             displayMessage('Lab reset. Start a fresh synthesis!');
         }
 
+        // Track selected lab tiles for reaction
+        let selectedLabTiles = [];
 
-        // Touch drag variables
-        let touchDraggingTile = null;
-        let touchStartX = 0;
-        let touchStartY = 0;
+        function handleTileClick(event) {
+            const tile = event.currentTarget;
+            const elementName = tile.getAttribute('data-element');
 
-        // Touch start handler
-        function handleTouchStart(event) {
-            const tile = event.target.closest('.element-tile');
-            if (!tile) return;
-
-            // Only allow dragging tiles inside the lab
-            if (tile.parentElement.id !== 'reaction-lab') return;
-
-            touchDraggingTile = tile;
-            const rect = tile.getBoundingClientRect();
-            touchStartX = event.touches[0].clientX - rect.left;
-            touchStartY = event.touches[0].clientY - rect.top;
-
-            tile.style.zIndex = 1000;
-        }
-
-        // Touch move handler
-        function handleTouchMove(event) {
-            if (!touchDraggingTile) return;
-            event.preventDefault();
-
-            const labRect = reactionLab.getBoundingClientRect();
-            let x = event.touches[0].clientX - labRect.left - touchStartX;
-            let y = event.touches[0].clientY - labRect.top - touchStartY;
-
-            // Constrain position to inside the lab
-            const tileWidth = touchDraggingTile.offsetWidth;
-            const tileHeight = touchDraggingTile.offsetHeight;
-            x = Math.max(0, Math.min(x, labRect.width - tileWidth));
-            y = Math.max(0, Math.min(y, labRect.height - tileHeight));
-
-            touchDraggingTile.style.position = 'absolute';
-            touchDraggingTile.style.left = `${x}px`;
-            touchDraggingTile.style.top = `${y}px`;
-        }
-
-        // Touch end handler
-        function handleTouchEnd(event) {
-            if (!touchDraggingTile) return;
-
-            // Check if dropped outside the lab
-            const touch = event.changedTouches[0];
-            const labRect = reactionLab.getBoundingClientRect();
-            if (
-                touch.clientX < labRect.left ||
-                touch.clientX > labRect.right ||
-                touch.clientY < labRect.top ||
-                touch.clientY > labRect.bottom
-            ) {
-                touchDraggingTile.remove();
-                displayMessage('Tile removed from the lab.');
-                showPlaceholder();
+            // If clicked in source, add to lab
+            if (tile.parentElement.id === 'element-source') {
+                const newTile = createElementTile(elementName, false);
+                reactionLab.appendChild(newTile);
+                displayMessage(`Added ${elementName} to the lab. Now add another one to combine!`);
+                // Attach click handler to new lab tile
+                newTile.addEventListener('click', handleTileClick);
+                removePlaceholder();
+                return;
             }
 
-            touchDraggingTile.style.zIndex = 10;
-            touchDraggingTile = null;
+            // If clicked in lab, select for reaction
+            if (tile.parentElement.id === 'reaction-lab') {
+                // Highlight selection
+                tile.style.borderColor = '#60a5fa';
+                selectedLabTiles.push(tile);
+
+                // Only allow two selections
+                if (selectedLabTiles.length === 2) {
+                    const tileA = selectedLabTiles[0];
+                    const tileB = selectedLabTiles[1];
+                    const nameA = tileA.getAttribute('data-element');
+                    const nameB = tileB.getAttribute('data-element');
+
+                    if (nameA === nameB) {
+                        displayMessage(`Whoops! Combining ${nameA} with itself doesn't cause a reaction, try something new!`, true);
+                    } else {
+                        const sortedNames = [nameA, nameB].sort();
+                        const recipeKey = sortedNames.join('|');
+                        const newElement = REACTION_RECIPES[recipeKey];
+
+                        if (newElement) {
+                            performReaction(newElement, tileB, tileA, x = null,y = null, isDraggable = false);
+                        } else {
+                            displayMessage(`No known reaction between ${nameA} and ${nameB}. Experiment failed!`, true);
+                        }
+                    }
+                    // Unhighlight and reset selection
+                    selectedLabTiles.forEach(t => t.style.borderColor = 'rgba(0, 0, 0, 0.338)');
+                    selectedLabTiles = [];
+                }
+            }
         }
-
-        // Attach touch listeners to lab tiles
-        reactionLab.addEventListener('touchstart', function (event) {
-            handleTouchStart(event);
-        }, { passive: false });
-
-        reactionLab.addEventListener('touchmove', function (event) {
-            handleTouchMove(event);
-        }, { passive: false });
-
-        reactionLab.addEventListener('touchend', function (event) {
-            handleTouchEnd(event);
-        }, { passive: false });
     </script>
 </body>
 
