@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elemental Synthesis Lab - Genshin Mini Game</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Oswald', Arial, sans-serif;
+            ;
+            background-color: #0f172a;
+        }
+
+        .element-tile {
+            width: 70px;
+            height: 70px;
+            cursor: grab;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: transform 0.1s;
+            box-shadow: 0 4px 8px rgb(220, 213, 213);
+            border: 3px solid rgba(0, 0, 0, 0.338);
+            font-weight: bold;
+            font-size: 10px;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+            user-select: none;
+            z-index: 10;
+            overflow: hidden;
+            /* Ensure tiles are above the lab background */
+        }
+
+        .element-tile:active {
+            cursor: grabbing;
+            transform: scale(1.05);
+            z-index: 100;
+        }
+
+        .element-icon {
+            width: 100%;
+        }
+
+        .reaction-lab {
+            min-height: 50vh;
+            border: 4px dashed #475569;
+            background-color: #1e293b;
+            position: relative;
+            /* Crucial for absolute positioning of children */
+            overflow: hidden;
+            /* Keep tiles inside */
+        }
+
+        .reaction-lab.drag-over {
+            border-color: #60a5fa;
+            background-color: #334155;
+        }
+
+        .bg-tile {
+            background-color: #000b24;
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 640px) {
+            .element-tile {
+                width: 60px;
+                height: 60px;
+            }
+        }
+    </style>
+</head>
+
+<body class="text-white p-4 sm:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-10">
+            <h1
+                class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-2">
+                Elemental Synthesis Lab
+            </h1>
+            <p class="text-xl text-gray-300">Mix reactions to discover new powers of Teyvat!</p>
+        </header>
+
+        <!-- Message Area -->
+        <div id="message-box"
+            class="p-4 mb-6 rounded-lg shadow-lg text-center text-lg transition duration-300 ease-in-out bg-gray-700">
+            Welcome, Alchemist! Drag an element from the top into the open lab space to start.
+        </div>
+
+        <!-- Found Elements (Source Area) -->
+        <div class="mb-8 p-4 bg-gray-800 rounded-xl shadow-2xl">
+            <h2 class="text-xl font-semibold mb-3 border-b border-gray-600 pb-2 text-yellow-300">
+                Available Elements & Reactions:
+            </h2>
+            <div id="element-source" class="flex flex-wrap gap-4 p-2 justify-center sm:justify-start">
+                <!-- Tiles will be rendered here by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Reaction Lab (Target Area) -->
+
+        <div id="reaction-lab" class="reaction-lab p-6 rounded-xl transition-colors duration-300"
+            ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+            <p id="lab-placeholder"
+                class="text-gray-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-2xl font-light pointer-events-none">
+                Drop elements here to create!</p>
+            <p class="text-white-500 absolute top-[5px] right-[10px] text-2xl font-bold pointer-events-none">
+                <span id="counter">0</span>/15
+            </p>
+            <!-- Dropped elements/new reactions will appear here -->
+        </div>
+
+        <!-- Controls -->
+        <div class="mt-8 text-center">
+            <button onclick="resetLab()"
+                class="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition transform hover:scale-105">
+                Reset Lab
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // The list of all base elements and their properties
+        const ELEMENTS = {
+            'Pyro': { colorClass: 'bg-tile', URL: './Elements/Pyro.png' },
+            'Hydro': { colorClass: 'bg-tile', URL: './Elements/Hydro.png' },
+            'Geo': { colorClass: 'bg-tile', URL: './Elements/Geo.png' },
+            'Cryo': { colorClass: 'bg-tile', URL: './Elements/Cryo.png' },
+            'Anemo': { colorClass: 'bg-tile', URL: './Elements/Anemo.png' },
+            'Dendro': { colorClass: 'bg-tile', URL: './Elements/Dendro.png' },
+            'Electro': { colorClass: 'bg-tile', URL: './Elements/Electro.png' },
+
+            'Overload': { colorClass: 'bg-tile', URL: './Elements/Overload.png' },
+            'Superconduct': { colorClass: 'bg-tile', URL: './Elements/Superconduct.png' },
+            'ElectroCharged': { colorClass: 'bg-tile', URL: './Elements/ElectroCharged.png' },
+            'Quicken': { colorClass: 'bg-tile', URL: './Elements/Quicken.png' },
+            'Vaporize': { colorClass: 'bg-tile', URL: './Elements/Vaporize.png' },
+            'Melt': { colorClass: 'bg-tile', URL: './Elements/Melt.png' },
+            'Bloom': { colorClass: 'bg-tile', URL: './Elements/Bloom.png' },
+            'Craystaline': { colorClass: 'bg-tile', URL: './Elements/Craystaline.png' },
+            'Frozen': { colorClass: 'bg-tile', URL: './Elements/Frozen.png' },
+            'Burning': { colorClass: 'bg-tile', URL: './Elements/Burning.png' },
+            'Swirl': { colorClass: 'bg-tile', URL: './Elements/Swirl.png' },
+
+            'Hyperbloom': { colorClass: 'bg-tile', URL: './Elements/Hyperbloom.png' },
+            'Spread': { colorClass: 'bg-tile', URL: './Elements/Spread.png' },
+            'Aggravate': { colorClass: 'bg-tile', URL: './Elements/Aggravate.png' },
+            'Burgeon': { colorClass: 'bg-tile', URL: './Elements/Burgeon.png' }
+        };
+
+        // The RECIPE BOOK (The "Logic" for combining reactions)
+        // Key is a sorted string of two element names: "Element1|Element2"
+        const REACTION_RECIPES = {
+            'Cryo|Pyro': 'Melt',
+            'Electro|Pyro': 'Overload',
+            'Cryo|Electro': 'Superconduct',
+            'Cryo|Hydro': 'Frozen',
+            'Dendro|Hydro': 'Bloom',
+            'Dendro|Pyro': 'Burning',
+            'Hydro|Pyro': 'Vaporize',
+            'Electro|Hydro': 'ElectroCharged',
+            'Dendro|Electro': 'Quicken',
+            'Anemo|Pyro': 'Swirl',
+            'Anemo|Hydro': 'Swirl',
+            'Anemo|Electro': 'Swirl',
+            'Anemo|Cryo': 'Swirl',
+            'Geo|Pyro': 'Craystaline',
+            'Geo|Hydroro': 'Craystaline',
+            'Cryo|Geo': 'Craystaline',
+            'Electro|Geo': 'Craystaline',
+
+            'Bloom|Hydro': 'Hyperbloom',
+            'Bloom|Pyro': 'Burgeon',
+            'Dendro|Quicken': 'Spread',
+            'Electro|Quicken': 'Aggravate',
+        };
+
+        // --- GAME STATE ---
+        let foundElements = [
+            'Pyro', 'Hydro', 'Electro', 'Cryo', 'Dendro', 'Anemo', 'Geo' // Start with base elements
+        ];
+
+        // --- DOM REFERENCES ---
+        const elementSource = document.getElementById('element-source');
+        const reactionLab = document.getElementById('reaction-lab');
+        const messageBox = document.getElementById('message-box');
+        const labPlaceholder = document.getElementById('lab-placeholder');
+        const counter = document.getElementById('counter');
+
+        // --- INITIALIZATION ---
+
+        window.onload = () => {
+            renderElements();
+        };
+
+        // --- RENDERING FUNCTIONS ---
+
+        function removePlaceholder() {
+            if (labPlaceholder) {
+                labPlaceholder.style.display = 'none';
+            }
+        }
+
+        function showPlaceholder() {
+            // Check if there are any tiles left in the lab
+            if (reactionLab.querySelectorAll('.element-tile').length === 0 && labPlaceholder) {
+                labPlaceholder.style.display = 'block';
+            }
+        }
+
+        function createElementTile(elementName, isDraggable = true, x = null, y = null) {
+            const element = ELEMENTS[elementName];
+            const tile = document.createElement('div');
+            // Ensure unique IDs for tiles in the lab, tiles from the source don't need a unique ID for drag
+            const tileId = isDraggable && x !== null ? `tile-${elementName}-${Date.now()}` : elementName;
+
+            tile.id = tileId;
+            tile.className = `element-tile ${element.colorClass} text-white rounded-xl shadow-xl transition-all`;
+            tile.setAttribute('data-element', elementName);
+            tile.setAttribute('draggable', isDraggable);
+            tile.innerHTML = `
+                <img src="${element.URL}" alt="${elementName}" class="text-3xl element-icon">
+                <div class="absolute bottom-0 text-xs leading-none">${elementName}</div>
+            `;
+
+            if (x !== null && y !== null) {
+                // If coordinates are provided, this tile is going into the lab (absolute position)
+                tile.style.position = 'absolute';
+                tile.style.left = `${x}px`;
+                tile.style.top = `${y}px`;
+            }
+
+            if (isDraggable) {
+                tile.addEventListener('dragstart', handleDragStart);
+            }
+            return tile;
+        }
+
+        function renderElements() {
+            elementSource.innerHTML = '';
+            foundElements.forEach(elementName => {
+                // Tiles in the source area are rendered statically (not absolutely positioned)
+                const tile = createElementTile(elementName, true, null, null);
+                elementSource.appendChild(tile);
+            });
+        }
+
+        function displayMessage(text, isError = false) {
+            messageBox.textContent = text;
+            messageBox.className = `p-4 mb-6 rounded-lg shadow-lg text-center text-lg transition duration-300 ease-in-out ${isError ? 'bg-red-800' : 'bg-green-800'}`;
+            // Reset color after a delay
+            setTimeout(() => {
+                messageBox.className = 'p-4 mb-6 rounded-lg shadow-lg text-center text-lg transition duration-300 ease-in-out bg-gray-700';
+            }, 3000);
+        }
+
+        // --- DRAG & DROP HANDLERS ---
+
+        let draggedElementData = null;
+
+        function handleDragStart(event) {
+            const element = event.target.closest('.element-tile');
+            if (!element) return;
+
+            // Store the ID of the tile being dragged
+            const isFromSource = element.parentElement.id === 'element-source';
+
+            draggedElementData = {
+                name: element.getAttribute('data-element'),
+                id: element.id,
+                isFromSource: isFromSource,
+                // If it's from the lab, we'll need to move it later
+                originalElement: isFromSource ? null : element
+            };
+
+            // Set data for transfer. For source elements, use the element name, for lab elements, use the ID
+            event.dataTransfer.setData('text/plain', element.id);
+
+            // Optional: Hide the original tile if moving within the lab to show the move intent
+            if (!isFromSource) {
+                setTimeout(() => element.style.opacity = '0.3', 0);
+            }
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault(); // Required to allow dropping
+            reactionLab.classList.add('drag-over');
+        }
+
+        function handleDragLeave(event) {
+            if (event.target.id === 'reaction-lab' || event.target.closest('#reaction-lab')) {
+                reactionLab.classList.remove('drag-over');
+                draggedElementData.originalElement.style.opacity = '1';
+            }
+
+        }
+        reactionLab.addEventListener('dragleave', handleDragLeave);
+
+        function handleDrop(event) {
+            event.preventDefault();
+            reactionLab.classList.remove('drag-over');
+
+            if (!draggedElementData) {
+                return; // No valid drag data
+            }
+
+            // Unhide the original element if it was hidden for dragging
+            if (draggedElementData.originalElement) {
+                draggedElementData.originalElement.style.opacity = '1';
+            }
+
+            const droppedTarget = event.target.closest('.element-tile');
+
+            // Calculate drop position relative to the Lab, compensating for tile size
+            const labRect = reactionLab.getBoundingClientRect();
+            // 35px is half the tile width/height (70px/2) to center the tile on the cursor
+            let x = event.clientX - labRect.left - 35;
+            let y = event.clientY - labRect.top - 35;
+
+            // Constrain position to inside the lab
+            const tileWidth = 70;
+            const tileHeight = 70;
+            const labWidth = labRect.width;
+            const labHeight = labRect.height;
+
+            x = Math.max(0, Math.min(x, labWidth - tileWidth));
+            y = Math.max(0, Math.min(y, labHeight - tileHeight));
+
+
+            if (!droppedTarget) {
+                // Case 1: Dropping into empty space in the Lab (Move or Copy/Place)
+                removePlaceholder();
+
+                if (draggedElementData.isFromSource) {
+                    // 1.1: Copy from Source to Lab
+                    const droppedTile = createElementTile(draggedElementData.name, true, x, y);
+                    reactionLab.appendChild(droppedTile);
+                    displayMessage(`Added ${draggedElementData.name} to the lab. Now add another one to combine!`);
+                } else {
+                    // 1.2: Move existing Lab tile (Reposition)
+                    const movingTile = draggedElementData.originalElement;
+                    if (movingTile) {
+                        movingTile.style.left = `${x}px`;
+                        movingTile.style.top = `${y}px`;
+                    }
+                }
+            } else {
+                // Case 2: Dropping onto another tile in the Lab (The Alchemy!)
+                // The element being dragged (Source) and the element being dropped ONTO (Target) must both be in the lab.
+                if (draggedElementData.originalElement && droppedTarget.parentElement.id === 'reaction-lab') {
+
+                    const sourceName = draggedElementData.name;
+                    const targetName = droppedTarget.getAttribute('data-element');
+
+                    if (sourceName === targetName) {
+                        displayMessage(`Whoops! Combining ${sourceName} with itself doesn't cause a reaction, try something new!`, true);
+                        return;
+                    }
+
+                    // 2.1. Determine the sorted key for the recipe lookup
+                    const sortedNames = [sourceName, targetName].sort();
+                    const recipeKey = sortedNames.join('|');
+
+                    // 2.2. Look up the resulting element
+                    const newElement = REACTION_RECIPES[recipeKey];
+
+                    if (newElement) {
+                        // Success!
+                        performReaction(newElement, droppedTarget, draggedElementData.originalElement, x, y);
+                    } else {
+                        // Failure
+                        displayMessage(`No known reaction between ${sourceName} and ${targetName}. Experiment failed!`, true);
+                    }
+                } else {
+                    const sourceName = draggedElementData.name;
+                    const targetName = droppedTarget.getAttribute('data-element');
+
+                    if (sourceName === targetName) {
+                        displayMessage(`Whoops! Combining ${sourceName} with itself doesn't cause a reaction, try something new!`, true);
+                        return;
+                    }
+
+                    // 2.1. Determine the sorted key for the recipe lookup
+                    const sortedNames = [sourceName, targetName].sort();
+                    const recipeKey = sortedNames.join('|');
+
+                    // 2.2. Look up the resulting element
+                    const newElement = REACTION_RECIPES[recipeKey];
+
+                    if (newElement) {
+                        // Success!
+                        performReaction(newElement, droppedTarget, draggedElementData.originalElement, x, y);
+                    } else {
+                        // Failure
+                        displayMessage(`No known reaction between ${sourceName} and ${targetName}. Experiment failed!`, true);
+                    }
+                }
+            }
+            draggedElementData = null; // Clear drag data
+        }
+
+        let RemainingElements = Object.keys(ELEMENTS).length - 7;
+        let FoundElements = 0;
+
+        function performReaction(newElement, targetTile, sourceTile, x, y) {
+            // 1. Remove the two source tiles from the Lab
+            targetTile.remove();
+            if (sourceTile) {
+                sourceTile.remove();
+            }
+
+            // 2. Add the new reaction tile to the Lab at the drop point
+            // The newly created tile must also be draggable
+            const newTile = createElementTile(newElement, true, x, y);
+            reactionLab.appendChild(newTile);
+
+            // 3. Add the new reaction to the Found Elements list if it's new
+            if (!foundElements.includes(newElement)) {
+                foundElements.push(newElement);
+                renderElements(); // Re-render the source area to include the new element
+                RemainingElements--;
+                FoundElements++;
+                counter.textContent = FoundElements;
+                displayMessage(`You discovered ${newElement}! Only ${RemainingElements} elemental reactions remain!`, false);
+            } else {
+                displayMessage(`Reaction complete! Created another ${newElement}.!`);
+            }
+
+            if (RemainingElements === 0) {
+                displayMessage('Congratulations! You have discovered all elemental reactions!', false);
+            }
+            showPlaceholder();
+        }
+
+        // --- CONTROL BUTTON HANDLERS ---
+
+        function resetLab() {
+            reactionLab.querySelectorAll('.element-tile').forEach(tile => tile.remove());
+            showPlaceholder();
+            displayMessage('Lab reset. Start a fresh synthesis!');
+        }
+    </script>
+</body>
+
+</html>
