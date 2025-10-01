@@ -446,6 +446,83 @@
             showPlaceholder();
             displayMessage('Lab reset. Start a fresh synthesis!');
         }
+
+
+        // Touch drag variables
+        let touchDraggingTile = null;
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        // Touch start handler
+        function handleTouchStart(event) {
+            const tile = event.target.closest('.element-tile');
+            if (!tile) return;
+
+            // Only allow dragging tiles inside the lab
+            if (tile.parentElement.id !== 'reaction-lab') return;
+
+            touchDraggingTile = tile;
+            const rect = tile.getBoundingClientRect();
+            touchStartX = event.touches[0].clientX - rect.left;
+            touchStartY = event.touches[0].clientY - rect.top;
+
+            tile.style.zIndex = 1000;
+        }
+
+        // Touch move handler
+        function handleTouchMove(event) {
+            if (!touchDraggingTile) return;
+            event.preventDefault();
+
+            const labRect = reactionLab.getBoundingClientRect();
+            let x = event.touches[0].clientX - labRect.left - touchStartX;
+            let y = event.touches[0].clientY - labRect.top - touchStartY;
+
+            // Constrain position to inside the lab
+            const tileWidth = touchDraggingTile.offsetWidth;
+            const tileHeight = touchDraggingTile.offsetHeight;
+            x = Math.max(0, Math.min(x, labRect.width - tileWidth));
+            y = Math.max(0, Math.min(y, labRect.height - tileHeight));
+
+            touchDraggingTile.style.position = 'absolute';
+            touchDraggingTile.style.left = `${x}px`;
+            touchDraggingTile.style.top = `${y}px`;
+        }
+
+        // Touch end handler
+        function handleTouchEnd(event) {
+            if (!touchDraggingTile) return;
+
+            // Check if dropped outside the lab
+            const touch = event.changedTouches[0];
+            const labRect = reactionLab.getBoundingClientRect();
+            if (
+                touch.clientX < labRect.left ||
+                touch.clientX > labRect.right ||
+                touch.clientY < labRect.top ||
+                touch.clientY > labRect.bottom
+            ) {
+                touchDraggingTile.remove();
+                displayMessage('Tile removed from the lab.');
+                showPlaceholder();
+            }
+
+            touchDraggingTile.style.zIndex = 10;
+            touchDraggingTile = null;
+        }
+
+        // Attach touch listeners to lab tiles
+        reactionLab.addEventListener('touchstart', function (event) {
+            handleTouchStart(event);
+        }, { passive: false });
+
+        reactionLab.addEventListener('touchmove', function (event) {
+            handleTouchMove(event);
+        }, { passive: false });
+
+        reactionLab.addEventListener('touchend', function (event) {
+            handleTouchEnd(event);
+        }, { passive: false });
     </script>
 </body>
 
