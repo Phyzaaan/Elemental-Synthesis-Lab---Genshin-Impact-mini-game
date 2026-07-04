@@ -21,6 +21,7 @@
             width: 70px;
             height: 70px;
             cursor: grab;
+            touch-action: none;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -230,6 +231,9 @@
 
         window.onload = () => {
             renderElements();
+            document.addEventListener('pointermove', handlePointerMove);
+            document.addEventListener('pointerup', handlePointerUp);
+            document.addEventListener('pointercancel', handlePointerCancel);
         };
 
         // --- RENDERING FUNCTIONS ---
@@ -254,7 +258,7 @@
             const tileId = isDraggable && x !== null ? `tile-${elementName}-${Date.now()}` : elementName;
 
             tile.id = tileId;
-            tile.className = `element-tile ${element.colorClass} text-white rounded-xl shadow-xl transition-all`;
+            tile.className = `element-tile ${element.colorClass} text-white rounded-xl shadow-xl `;
             tile.setAttribute('data-element', elementName);
             tile.setAttribute('draggable', isDraggable);
             tile.innerHTML = `
@@ -271,10 +275,10 @@
 
             if (isDraggable) {
                 tile.addEventListener('dragstart', handleDragStart);
+                tile.addEventListener('dragend', handleDragEnd);
+                tile.addEventListener('pointerdown', handlePointerDown);
                 reactionLab.addEventListener('dragleave', handleDragLeave);
             }
-            // Add click for lab tiles
-            tile.addEventListener('click', handleTileClick);
             return tile;
         }
 
@@ -299,66 +303,171 @@
         // --- DRAG & DROP HANDLERS ---
 
         let draggedElementData = null;
+        let activePointerDrag = null;
 
         function handleDragStart(event) {
             const element = event.target.closest('.element-tile');
             if (!element) return;
 
-            // Store the ID of the tile being dragged
             const isFromSource = element.parentElement.id === 'element-source';
 
             draggedElementData = {
                 name: element.getAttribute('data-element'),
                 id: element.id,
                 isFromSource: isFromSource,
-                // If it's from the lab, we'll need to move it later
                 originalElement: isFromSource ? null : element
             };
 
-            // Set data for transfer. For source elements, use the element name, for lab elements, use the ID
-            event.dataTransfer.setData('text/plain', element.id);
+            if (event.dataTransfer) {
+                event.dataTransfer.setData('text/plain', element.id);
+            }
 
-            // Optional: Hide the original tile if moving within the lab to show the move intent
-            if (!isFromSource) {
-                setTimeout(() => element.style.opacity = '0.3', 0);
+            if (!isFromSource && draggedElementData.originalElement) {
+                draggedElementData.originalElement.style.opacity = '0.3';
             }
         }
 
         function handleDragOver(event) {
-            event.preventDefault(); // Required to allow dropping
+            event.preventDefault();
             reactionLab.classList.add('drag-over');
         }
 
         function handleDragLeave(event) {
             if (event.target.id === 'reaction-lab' || event.target.closest('#reaction-lab')) {
                 reactionLab.classList.remove('drag-over');
-                draggedElementData.originalElement.style.opacity = '1';
+                if (draggedElementData?.originalElement) {
+                    draggedElementData.originalElement.style.opacity = '1';
+                }
             }
-
         }
 
         function handleDrop(event) {
             event.preventDefault();
-            reactionLab.classList.remove('drag-over');
+            const droppedTarget = getDropTarget(event.clientX, event.clientY);
+            finalizeDrop(event.clientX, event.clientY, droppedTarget);
+        }
 
-            if (!draggedElementData) {
-                return; // No valid drag data
+        function handleDragEnd(event) {
+            if (!draggedElementData) return;
+            const droppedTarget = getDropTarget(event.clientX, event.clientY);
+            finalizeDrop(event.clientX, event.clientY, droppedTarget);
+        }
+
+        function handlePointerDown(event) {
+            const tile = event.target.closest('.element-tile');
+            if (!tile) return;
+
+            if (event.pointerType === 'mouse' && event.button !== 0) {
+                return;
             }
 
-            // Unhide the original element if it was hidden for dragging
-            if (draggedElementData.originalElement) {
+            const isFromSource = tile.parentElement.id === 'element-source';
+            const isLabTile = tile.parentElement.id === 'reaction-lab';
+
+            if (!isFromSource && !isLabTile) {
+                return;
+            }
+
+            draggedElementData = {
+                name: tile.getAttribute('data-element'),
+                id: tile.id,
+                isFromSource: isFromSource,
+                originalElement: isFromSource ? null : tile
+            };
+
+            activePointerDrag = {
+                pointerId: event.pointerId,
+                tile,
+                startX: event.clientX,
+                startY: event.clientY,
+                clone: null,
+                moved: false
+            };
+
+            if (!isFromSource && draggedElementData.originalElement) {
+                draggedElementData.originalElement.style.opacity = '0.3';
+            }
+
+            event.preventDefault();
+            tile.setPointerCapture(event.pointerId);
+        }
+
+        function handlePointerMove(event) {
+            if (!activePointerDrag || event.pointerId !== activePointerDrag.pointerId) {
+                return;
+            }
+
+            const dx = event.clientX - activePointerDrag.startX;
+            const dy = event.clientY - activePointerDrag.startY;
+
+            if (!activePointerDrag.moved && Math.hypot(dx, dy) < 8) {
+                return;
+            }
+
+            activePointerDrag.moved = true;
+
+            if (!activePointerDrag.clone) {
+                const clone = activePointerDrag.tile.cloneNode(true);
+                clone.className = `${clone.className} pointer-events-none fixed z-[1000] opacity-90`;
+                clone.style.position = 'fixed';
+                clone.style.left = `${event.clientX - 35}px`;
+                clone.style.top = `${event.clientY - 35}px`;
+                clone.style.pointerEvents = 'none';
+                clone.style.transform = 'scale(1.03)';
+                document.body.appendChild(clone);
+                activePointerDrag.clone = clone;
+            } else {
+                activePointerDrag.clone.style.left = `${event.clientX - 35}px`;
+                activePointerDrag.clone.style.top = `${event.clientY - 35}px`;
+            }
+        }
+
+        function handlePointerUp(event) {
+            if (!activePointerDrag || event.pointerId !== activePointerDrag.pointerId) {
+                return;
+            }
+
+            const droppedTarget = getDropTarget(event.clientX, event.clientY);
+
+            if (activePointerDrag.moved) {
+                finalizeDrop(event.clientX, event.clientY, droppedTarget);
+            } else {
+                cleanupPointerDrag();
+            }
+        }
+
+        function handlePointerCancel(event) {
+            if (!activePointerDrag || event.pointerId !== activePointerDrag.pointerId) {
+                return;
+            }
+            cleanupPointerDrag();
+        }
+
+        function cleanupPointerDrag() {
+            if (activePointerDrag?.clone) {
+                activePointerDrag.clone.remove();
+            }
+            activePointerDrag = null;
+            if (draggedElementData?.originalElement) {
                 draggedElementData.originalElement.style.opacity = '1';
             }
+        }
 
-            const droppedTarget = event.target.closest('.element-tile');
+        function getDropTarget(clientX, clientY) {
+            const elementUnderPointer = document.elementFromPoint(clientX, clientY);
+            if (!elementUnderPointer) return null;
 
-            // Calculate drop position relative to the Lab, compensating for tile size
+            const tile = elementUnderPointer.closest('.element-tile');
+            if (!tile) return null;
+
+            return tile.parentElement?.id === 'reaction-lab' ? tile : null;
+        }
+
+        function getDropCoordinates(clientX, clientY) {
             const labRect = reactionLab.getBoundingClientRect();
-            // 35px is half the tile width/height (70px/2) to center the tile on the cursor
-            let x = event.clientX - labRect.left - 35;
-            let y = event.clientY - labRect.top - 35;
+            let x = clientX - labRect.left - 35;
+            let y = clientY - labRect.top - 35;
 
-            // Constrain position to inside the lab
             const tileWidth = 70;
             const tileHeight = 70;
             const labWidth = labRect.width;
@@ -367,18 +476,43 @@
             x = Math.max(0, Math.min(x, labWidth - tileWidth));
             y = Math.max(0, Math.min(y, labHeight - tileHeight));
 
+            return { x, y };
+        }
+
+        function finalizeDrop(clientX, clientY, droppedTarget = null) {
+            reactionLab.classList.remove('drag-over');
+
+            if (!draggedElementData) {
+                cleanupPointerDrag();
+                return;
+            }
+
+            if (draggedElementData.originalElement) {
+                draggedElementData.originalElement.style.opacity = '1';
+            }
+
+            const labRect = reactionLab.getBoundingClientRect();
+            const isInsideLab = clientX >= labRect.left && clientX <= labRect.right && clientY >= labRect.top && clientY <= labRect.bottom;
+            const { x, y } = getDropCoordinates(clientX, clientY);
+
+            if (!isInsideLab) {
+                if (draggedElementData.originalElement) {
+                    draggedElementData.originalElement.remove();
+                    displayMessage('Element removed from the playground.', true);
+                }
+                cleanupPointerDrag();
+                draggedElementData = null;
+                return;
+            }
 
             if (!droppedTarget) {
-                // Case 1: Dropping into empty space in the Lab (Move or Copy/Place)
                 removePlaceholder();
 
                 if (draggedElementData.isFromSource) {
-                    // 1.1: Copy from Source to Lab
                     const droppedTile = createElementTile(draggedElementData.name, true, x, y);
                     reactionLab.appendChild(droppedTile);
                     displayMessage(`Added ${draggedElementData.name} to the lab. Now add another one to combine!`);
                 } else {
-                    // 1.2: Move existing Lab tile (Reposition)
                     const movingTile = draggedElementData.originalElement;
                     if (movingTile) {
                         movingTile.style.left = `${x}px`;
@@ -386,30 +520,30 @@
                     }
                 }
             } else {
-                // Case 2: Dropping onto another tile in the Lab (The Alchemy!)
-                // The element being dragged (Source) and the element being dropped ONTO (Target) must both be in the lab.
-                if (draggedElementData.originalElement && droppedTarget.parentElement.id === 'reaction-lab') {
-
+                if (draggedElementData.originalElement === droppedTarget) {
+                    const movingTile = draggedElementData.originalElement;
+                    if (movingTile) {
+                        movingTile.style.left = `${x}px`;
+                        movingTile.style.top = `${y}px`;
+                    }
+                } else if (draggedElementData.originalElement && droppedTarget.parentElement.id === 'reaction-lab') {
                     const sourceName = draggedElementData.name;
                     const targetName = droppedTarget.getAttribute('data-element');
 
                     if (sourceName === targetName) {
                         displayMessage(`Whoops! Combining ${sourceName} with itself doesn't cause a reaction, try something new!`, true);
+                        cleanupPointerDrag();
+                        draggedElementData = null;
                         return;
                     }
 
-                    // 2.1. Determine the sorted key for the recipe lookup
                     const sortedNames = [sourceName, targetName].sort();
                     const recipeKey = sortedNames.join('|');
-
-                    // 2.2. Look up the resulting element
                     const newElement = REACTION_RECIPES[recipeKey];
 
                     if (newElement) {
-                        // Success!
                         performReaction(newElement, droppedTarget, draggedElementData.originalElement, x, y);
                     } else {
-                        // Failure
                         displayMessage(`No known reaction between ${sourceName} and ${targetName}. Experiment failed!`, true);
                     }
                 } else {
@@ -418,26 +552,25 @@
 
                     if (sourceName === targetName) {
                         displayMessage(`Whoops! Combining ${sourceName} with itself doesn't cause a reaction, try something new!`, true);
+                        cleanupPointerDrag();
+                        draggedElementData = null;
                         return;
                     }
 
-                    // 2.1. Determine the sorted key for the recipe lookup
                     const sortedNames = [sourceName, targetName].sort();
                     const recipeKey = sortedNames.join('|');
-
-                    // 2.2. Look up the resulting element
                     const newElement = REACTION_RECIPES[recipeKey];
 
                     if (newElement) {
-                        // Success!
                         performReaction(newElement, droppedTarget, draggedElementData.originalElement, x, y);
                     } else {
-                        // Failure
                         displayMessage(`No known reaction between ${sourceName} and ${targetName}. Experiment failed!`, true);
                     }
                 }
             }
-            draggedElementData = null; // Clear drag data
+
+            cleanupPointerDrag();
+            draggedElementData = null;
         }
 
         let RemainingElements = Object.keys(ELEMENTS).length - 7;
@@ -486,56 +619,6 @@
             congoMsg.classList.remove('show');
         }
 
-        // Track selected lab tiles for reaction
-        let selectedLabTiles = [];
-
-        function handleTileClick(event) {
-            const tile = event.currentTarget;
-            const elementName = tile.getAttribute('data-element');
-
-            // If clicked in source, add to lab
-            if (tile.parentElement.id === 'element-source') {
-                const newTile = createElementTile(elementName, false);
-                reactionLab.appendChild(newTile);
-                displayMessage(`Added ${elementName} to the lab. Now add another one to combine!`);
-                // Attach click handler to new lab tile
-                newTile.addEventListener('click', handleTileClick);
-                removePlaceholder();
-                return;
-            }
-
-            // If clicked in lab, select for reaction
-            if (tile.parentElement.id === 'reaction-lab') {
-                // Highlight selection
-                tile.style.borderColor = '#60a5fa';
-                selectedLabTiles.push(tile);
-
-                // Only allow two selections
-                if (selectedLabTiles.length === 2) {
-                    const tileA = selectedLabTiles[0];
-                    const tileB = selectedLabTiles[1];
-                    const nameA = tileA.getAttribute('data-element');
-                    const nameB = tileB.getAttribute('data-element');
-
-                    if (nameA === nameB) {
-                        displayMessage(`Whoops! Combining ${nameA} with itself doesn't cause a reaction, try something new!`, true);
-                    } else {
-                        const sortedNames = [nameA, nameB].sort();
-                        const recipeKey = sortedNames.join('|');
-                        const newElement = REACTION_RECIPES[recipeKey];
-
-                        if (newElement) {
-                            performReaction(newElement, tileB, tileA, x = null, y = null, isDraggable = false);
-                        } else {
-                            displayMessage(`No known reaction between ${nameA} and ${nameB}. Experiment failed!`, true);
-                        }
-                    }
-                    // Unhighlight and reset selection
-                    selectedLabTiles.forEach(t => t.style.borderColor = 'rgba(0, 0, 0, 0.338)');
-                    selectedLabTiles = [];
-                }
-            }
-        }
     </script>
 </body>
 
