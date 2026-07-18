@@ -1,0 +1,78 @@
+body {
+  font-family: "Oswald", Arial, sans-serif;
+  background-color: #0f172a;
+}
+
+.element-tile {
+  width: 70px;
+  height: 70px;
+  cursor: grab;
+  touch-action: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform 0.1s;
+  box-shadow: 0 4px 8px rgb(220, 213, 213);
+  border: 3px solid rgba(0, 0, 0, 0.338);
+  font-weight: bold;
+  font-size: 10px;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+  user-select: none;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.element-tile:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+  z-index: 100;
+}
+
+.element-icon {
+  width: 100%;
+}
+
+.reaction-lab {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  min-height: 50vh;
+  border: 4px dashed #475569;
+  background-color: #1e293b;
+  position: relative;
+  overflow: hidden;
+}
+
+.reaction-lab.drag-over {
+  border-color: #60a5fa;
+  background-color: #334155;
+}
+
+.bg-tile {
+  background-color: #000b24;
+}
+
+#congoMsg {
+  opacity: 0;
+  scale: 0.3;
+  pointer-events: none;
+  transition: all cubic-bezier(0.32, 1.5, 0.77, 1.49) 0.7s;
+}
+
+#congoMsg.show {
+  opacity: 1;
+  scale: 1;
+  pointer-events: auto;
+}  
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .element-tile {
+    width: 60px;
+    height: 60px;
+  }
+}
